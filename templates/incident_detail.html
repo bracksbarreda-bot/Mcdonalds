@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Incidencia #{{ inc.id }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a href="{{ url_for('incidents') }}" class="muted">← Incidencias</a>
+    <h1>
+      Incidencia #{{ inc.id }}
+      <span class="pill" style="--c: {{ PLATFORMS[inc.platform].color }}">{{ PLATFORMS[inc.platform].name }}</span>
+      <span class="status status-{{ inc.status }}">{{ STATUSES[inc.status] }}</span>
+    </h1>
+  </div>
+  <div class="head-actions">
+    <a class="btn" href="{{ url_for('incident_edit', iid=inc.id) }}">Editar</a>
+    {% if is_admin() %}
+    <form method="post" action="{{ url_for('incident_delete', iid=inc.id) }}" onsubmit="return confirm('¿Eliminar la incidencia #{{ inc.id }}? No se puede deshacer.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-danger">Eliminar</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid grid-detail">
+  <div class="stack">
+    <article class="card">
+      <h2>Datos del pedido</h2>
+      <dl class="details">
+        <div><dt>Nº pedido</dt><dd><strong>{{ inc.order_ref }}</strong></dd></div>
+        <div><dt>Fecha del pedido</dt><dd>{{ inc.order_date|dt }} <small class="muted">(hace {{ days_since(inc.order_date) }} días)</small></dd></div>
+        <div><dt>Restaurante</dt><dd>{{ inc.restaurant_name }} ({{ inc.restaurant_code }})</dd></div>
+        <div><dt>Tipo</dt><dd>{{ INCIDENT_TYPES.get(inc.incident_type, inc.incident_type) }}</dd></div>
+        <div><dt>Prioridad</dt><dd><span class="prio prio-{{ inc.priority }}">{{ PRIORITIES.get(inc.priority, inc.priority) }}</span></dd></div>
+        <div><dt>Ticket plataforma</dt><dd>{{ inc.platform_claim_ref or '—' }}</dd></div>
+        <div class="span-2"><dt>Productos afectados</dt><dd>{{ inc.items_affected or '—' }}</dd></div>
+        <div class="span-2"><dt>Descripción</dt><dd class="prewrap">{{ inc.description or '—' }}</dd></div>
+        <div><dt>Registrada por</dt><dd>{{ inc.created_by_name or '—' }} · {{ inc.created_at|dt }}</dd></div>
+        <div><dt>Última actualización</dt><dd>{{ inc.updated_at|dt }}</dd></div>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Importes</h2>
+      <div class="amounts">
+        <div><span class="kpi-label">Pedido</span><span class="kpi-value">{{ inc.order_amount|money }}</span></div>
+        <div><span class="kpi-label">Reclamado</span><span class="kpi-value">{{ inc.claimed_amount|money }}</span></div>
+        <div class="ok"><span class="kpi-label">Recuperado</span><span class="kpi-value">{{ inc.recovered_amount|money }}</span></div>
+      </div>
+    </article>
+
+    {% if source %}
+    <article class="card">
+      <details open>
+        <summary><h2 class="inline-h2">Datos originales del archivo de {{ PLATFORMS[inc.platform].name }}</h2></summary>
+        <dl class="source-list">
+          {% for k, v in source %}<dt>{{ k }}</dt><dd class="prewrap">{{ v }}</dd>{% endfor %}
+        </dl>
+      </details>
+    </article>
+    {% endif %}
+
+    <article class="card">
+      <h2>Texto para reclamar a {{ PLATFORMS[inc.platform].name }}</h2>
+      <label for="claim_text" class="muted">Cópialo y pégalo en el portal de soporte de la plataforma.</label>
+      <textarea id="claim_text" rows="9" readonly>{{ claim_text }}</textarea>
+      <button type="button" class="btn" id="copy-claim">Copiar texto</button>
+      <span id="copy-status" class="muted" role="status"></span>
+    </article>
+  </div>
+
+  <div class="stack">
+    <article class="card">
+      <h2>Cambiar estado</h2>
+      <form method="post" action="{{ url_for('incident_status', iid=inc.id) }}" class="form" id="status-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field">
+          <label for="status">Nuevo estado</label>
+          <select id="status" name="status">
+            {% for k, v in STATUSES.items() %}
+            <option value="{{ k }}" {% if k == inc.status %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field" data-show-for="reclamada">
+          <label for="claim_ref">Ticket de la plataforma</label>
+          <input id="claim_ref" name="platform_claim_ref" maxlength="64" value="{{ inc.platform_claim_ref or '' }}">
+        </div>
+        <div class="field" data-show-for="resuelta">
+          <label for="recovered_amount">Importe recuperado (€)</label>
+          <input id="recovered_amount" name="recovered_amount" inputmode="decimal"
+                 value="{{ '%.2f'|format(inc.recovered_amount if inc.status == 'resuelta' else inc.claimed_amount) }}">
+        </div>
+        <div class="field">
+          <label for="status_comment">Comentario (opcional)</label>
+          <textarea id="status_comment" name="comment" rows="2" maxlength="1000"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Actualizar estado</button>
+      </form>
+    </article>
+
+    <article class="card" id="historial">
+      <h2>Historial</h2>
+      <form method="post" action="{{ url_for('incident_comment', iid=inc.id) }}" class="form comment-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="comment">Añadir comentario</label>
+        <textarea id="comment" name="comment" rows="2" maxlength="1000" required></textarea>
+        <button type="submit" class="btn">Comentar</button>
+      </form>
+      <ol class="timeline">
+        {% for e in events %}
+        <li class="ev ev-{{ e.event_type }}">
+          <div class="ev-meta">{{ e.created_at|dt }} · {{ e.full_name or 'Sistema' }}</div>
+          <div class="prewrap">{{ e.message }}</div>
+        </li>
+        {% endfor %}
+      </ol>
+    </article>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Copiar el texto de reclamación al portapapeles
+  document.getElementById('copy-claim').addEventListener('click', async () => {
+    const text = document.getElementById('claim_text').value;
+    const status = document.getElementById('copy-status');
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'Copiado.';
+    } catch {
+      document.getElementById('claim_text').select();
+      status.textContent = 'Selecciona y copia con Ctrl+C.';
+    }
+  });
+
+  // Mostrar solo los campos relevantes según el estado elegido
+  const sel = document.getElementById('status');
+  const toggle = () => document.querySelectorAll('#status-form [data-show-for]').forEach(el => {
+    el.hidden = el.dataset.showFor !== sel.value;
+  });
+  sel.addEventListener('change', toggle);
+  toggle();
+</script>
+{% endblock %}

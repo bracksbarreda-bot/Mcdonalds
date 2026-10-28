@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Incidencias{% endblock %} · Delivery Hub</title>
+  <link rel="stylesheet" href="{{ url_for('frontend_files', filename='css/styles.css') }}">
+</head>
+<body>
+<a class="skip-link" href="#main">Saltar al contenido</a>
+{% if g.user %}
+<header class="topbar">
+  <a class="brand" href="{{ url_for('dashboard') }}">
+    <span class="logo" aria-hidden="true">M</span>
+    <span>Delivery Hub</span>
+  </a>
+  <nav aria-label="Principal" class="nav">
+    <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Panel</a>
+    <a href="{{ url_for('incidents') }}" {% if request.endpoint in ('incidents', 'incident_detail', 'incident_edit') %}aria-current="page"{% endif %}>Incidencias</a>
+    {% if is_admin() %}<a href="{{ url_for('import_upload') }}" {% if request.endpoint and request.endpoint.startswith('import_') %}aria-current="page"{% endif %}>Importar Excel</a>{% endif %}
+    <a href="{{ url_for('incident_new') }}" class="btn btn-primary">+ Nueva incidencia</a>
+  </nav>
+  <div class="user">
+    <a href="{{ url_for('account') }}" class="user-link" title="Cambiar contraseña">{{ g.user.full_name }} · <small>{{ 'Todos los locales' if is_admin() else g.user.restaurant_name }}</small></a>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost">Salir</button>
+    </form>
+  </div>
+</header>
+{% endif %}
+
+<main id="main" class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes">
+      {% for category, message in messages %}
+      <p class="flash flash-{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">{{ message }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

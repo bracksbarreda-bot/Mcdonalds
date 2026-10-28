@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Importar Excel{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Importar Excel de incidencias</h1>
+  <a class="btn btn-ghost" href="{{ url_for('incidents') }}">Ver incidencias</a>
+</div>
+
+<ol class="stepper" aria-label="Pasos de la importación">
+  <li aria-current="step">1 · Subir Excel</li><li>2 · Revisar</li><li>3 · Listo</li>
+</ol>
+
+<div class="grid grid-detail">
+  <div class="stack">
+    <form method="post" enctype="multipart/form-data" class="card form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h2><span class="step-n" aria-hidden="true">1</span> Sube el Excel de la plataforma</h2>
+      <p class="muted">La plataforma y el restaurante de cada pedido se leen del propio Excel. No hay que elegir nada.</p>
+      <label for="imp-file">Archivo Excel (.xlsx, máx. 10 MB)</label>
+      <input id="imp-file" name="file" type="file" accept=".xlsx,.xlsm" required>
+      <button type="submit" class="btn btn-primary">Analizar Excel</button>
+    </form>
+  </div>
+
+  <div class="stack">
+    {% include "_import_help.html" %}
+    <article class="card">
+      <h2>Últimas importaciones</h2>
+      {% if batches %}
+      <table class="table compact">
+        <thead><tr><th scope="col">Fecha</th><th scope="col">Archivo</th><th scope="col" class="num">Creadas</th></tr></thead>
+        <tbody>
+          {% for b in batches %}
+          <tr>
+            <td class="nowrap">{{ b.created_at|dt }}<br><span class="pill" style="--c: {{ PLATFORMS[b.platform].color }}">{{ PLATFORMS[b.platform].name }}</span></td>
+            <td><a href="{{ url_for('incidents', batch=b.id) }}">{{ b.filename }}</a><br><small class="muted">{{ b.total_rows }} filas</small></td>
+            <td class="num">{{ b.created_count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">Todavía no se ha importado ningún archivo.</p>
+      {% endif %}
+    </article>
+  </div>
+</div>
+{% endblock %}

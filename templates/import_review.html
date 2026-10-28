@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Revisar importación{% endblock %}
+{% block content %}
+{% set s = r.summary %}
+{% set status_info = {'nueva': ('Se importará', 'status-resuelta'), 'error': ('Con error', 'status-abierta'),
+  'repetida': ('Repetida en el Excel', 'status-reclamada'), 'duplicada': ('Ya importada antes', 'status-rechazada')} %}
+<div class="page-head">
+  <h1>Importar Excel de incidencias</h1>
+  <a class="btn btn-ghost" href="{{ url_for('import_upload') }}">Subir otro Excel</a>
+</div>
+
+<ol class="stepper" aria-label="Pasos de la importación">
+  <li class="done">1 · Subir Excel</li><li aria-current="step">2 · Revisar</li><li>3 · Listo</li>
+</ol>
+
+<form method="post" action="{{ url_for('import_review') }}" class="card" id="review-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="file_id" value="{{ r.file_id }}">
+  <input type="hidden" name="filename" value="{{ r.filename }}">
+
+  <h2><span class="step-n" aria-hidden="true">2</span> Revisa qué se va a importar</h2>
+  <p class="file-line">📄 <strong>{{ r.filename }}</strong> ·
+    <span class="pill" style="--c: {{ PLATFORMS[r.platform].color }}">{{ PLATFORMS[r.platform].name }}</span> · {{ s.rows }} pedidos</p>
+
+  <div class="format-banner ok">
+    <p><strong>✔ {{ r.profile.label }}</strong></p>
+    <ul>{% for x in r.profile.explain %}<li>{{ x|safe }}</li>{% endfor %}</ul>
+  </div>
+  {% for n in r.notices %}<p class="flash flash-warning">{{ n }}</p>{% endfor %}
+
+  {% if r.profile.needs_date %}
+  <div class="field block">
+    <label for="ref_date">Día de los pedidos</label>
+    <input id="ref_date" name="ref_date" type="date" value="{{ r.ref_date }}" class="auto-submit" style="max-width: 220px">
+    <noscript><button type="submit" class="btn">Aplicar</button></noscript>
+  </div>
+  {% endif %}
+
+  <div class="funnel" role="list">
+    <div class="funnel-step" role="listitem"><span class="kpi-value">{{ s.rows }}</span><span class="kpi-label">Pedidos en el Excel</span></div>
+    <span class="funnel-arrow" aria-hidden="true">→</span>
+    <div class="funnel-step ok" role="listitem"><span class="kpi-value">{{ s.new }}</span><span class="kpi-label">Nuevos a importar</span></div>
+    <div class="funnel-step money" role="listitem"><span class="kpi-value">{{ s.claimed_total|money }}</span><span class="kpi-label">A reclamar</span></div>
+  </div>
+  <p class="muted funnel-extra">
+    {% if s.duplicates %}Ya importados antes: <strong>{{ s.duplicates }}</strong> · {% endif %}
+    {% if s.repeated %}Repetidos en el Excel: <strong>{{ s.repeated }}</strong> · {% endif %}
+    {% if s.errors %}Con error: <strong>{{ s.errors }}</strong>{% endif %}
+  </p>
+
+  <div class="block">
+    <h3>Restaurantes del Excel</h3>
+    <div class="table-wrap">
+      <table class="table compact">
+        <thead><tr><th scope="col">En el Excel</th><th scope="col" class="num">Pedidos</th><th scope="col">Restaurante</th></tr></thead>
+        <tbody>
+          {% for st in r.stores %}
+          <tr><td>{{ st.name }}</td><td class="num">{{ st.rows }}</td>
+            <td>{{ st.restaurant_name }}{% if st.is_new %} <span class="tag-ok">nuevo, se crea al importar</span>{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="block">
+    <h3>Pedidos</h3>
+    <div class="table-wrap">
+      <table class="table compact preview">
+        <thead><tr><th scope="col">Fila</th><th scope="col">Estado</th><th scope="col">Pedido</th><th scope="col">Fecha</th>
+          <th scope="col">Motivo</th><th scope="col">Restaurante</th><th scope="col" class="num">A reclamar</th><th scope="col">Avisos</th></tr></thead>
+        <tbody>
+          {% for it in r['items'] %}
+          <tr>
+            <td>{{ it.row }}</td>
+            <td><span class="status {{ status_info[it.status][1] }}">{{ status_info[it.status][0] }}</span></td>
+            <td>{{ it.order_ref or '—' }}</td>
+            <td class="nowrap">{% if it.order_date %}{% if it.approx_date %}<span class="approx" title="Día estimado">≈</span> {% endif %}{{ it.order_date|dt }}{% else %}—{% endif %}</td>
+            <td>{{ it.headline }}</td>
+            <td>{{ it.restaurant_name or '—' }}</td>
+            <td class="num"><strong>{{ it.claimed_amount|money if it.claimed_amount is defined else '—' }}</strong></td>
+            <td class="notes">{% if it.error %}<small>{{ it.error }}</small><br>{% endif %}{% for w in it.warnings %}<small>{{ w }}</small><br>{% endfor %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="import-actions">
+    <p class="muted">{% if s.new == 0 %}No hay pedidos nuevos que importar.{% endif %}</p>
+    <div class="form-actions">
+      <a class="btn btn-ghost" href="{{ url_for('import_upload') }}">Cancelar</a>
+      <button type="submit" class="btn btn-primary" formaction="{{ url_for('import_confirm') }}" {% if s.new == 0 %}disabled{% endif %}>
+        Importar {{ s.new }} incidencia{{ '' if s.new == 1 else 's' }}{% if s.claimed_total %} · {{ s.claimed_total|money }} a reclamar{% endif %}
+      </button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('#review-form .auto-submit').forEach((el) =>
+    el.addEventListener('change', () => document.getElementById('review-form').submit()));
+</script>
+{% endblock %}

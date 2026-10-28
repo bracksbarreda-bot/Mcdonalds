@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Incidencias{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Incidencias <small class="muted">({{ total }})</small></h1>
+  <div class="head-actions">
+    {% if is_admin() %}<a class="btn" href="{{ url_for('import_upload') }}">Importar Excel</a>{% endif %}
+    <a class="btn" href="{{ export_url }}">Exportar CSV</a>
+  </div>
+</div>
+
+<form method="get" class="card filters" aria-label="Filtros">
+  <div class="field">
+    <label for="q">Buscar</label>
+    <input id="q" name="q" value="{{ args.get('q', '') }}" placeholder="Nº pedido, producto, ticket…">
+  </div>
+  <div class="field">
+    <label for="platform">Plataforma</label>
+    <select id="platform" name="platform">
+      <option value="">Todas</option>
+      {% for k, p in PLATFORMS.items() %}
+      <option value="{{ k }}" {% if args.get('platform') == k %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="status">Estado</label>
+    <select id="status" name="status">
+      <option value="">Todos</option>
+      <option value="pendientes" {% if args.get('status') == 'pendientes' %}selected{% endif %}>Pendientes (abiertas + reclamadas)</option>
+      {% for k, v in STATUSES.items() %}
+      <option value="{{ k }}" {% if args.get('status') == k %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="type">Tipo</label>
+    <select id="type" name="type">
+      <option value="">Todos</option>
+      {% for k, v in INCIDENT_TYPES.items() %}
+      <option value="{{ k }}" {% if args.get('type') == k %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if is_admin() %}
+  <div class="field">
+    <label for="restaurant">Local</label>
+    <select id="restaurant" name="restaurant">
+      <option value="">Todos</option>
+      {% for r in restaurants %}
+      <option value="{{ r.id }}" {% if args.get('restaurant') == r.id|string %}selected{% endif %}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="field">
+    <label for="desde">Desde</label>
+    <input id="desde" name="desde" type="date" value="{{ args.get('desde', '') }}">
+  </div>
+  <div class="field">
+    <label for="hasta">Hasta</label>
+    <input id="hasta" name="hasta" type="date" value="{{ args.get('hasta', '') }}">
+  </div>
+  <div class="field actions">
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <a class="btn btn-ghost" href="{{ url_for('incidents') }}">Limpiar</a>
+  </div>
+</form>
+
+<p class="summary">Reclamado: <strong>{{ sums.claimed|money }}</strong> · Recuperado: <strong>{{ sums.recovered|money }}</strong></p>
+
+{% if rows %}
+<div class="card table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Fecha pedido</th>
+        <th scope="col">Plataforma</th>
+        <th scope="col">Nº pedido</th>
+        {% if is_admin() %}<th scope="col">Local</th>{% endif %}
+        <th scope="col">Tipo</th>
+        <th scope="col">Prioridad</th>
+        <th scope="col" class="num">Reclamado</th>
+        <th scope="col" class="num">Recuperado</th>
+        <th scope="col">Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in rows %}
+      {% set late = i.status in OPEN_STATUSES and days_since(i.order_date) > ALERT_DAYS %}
+      <tr {% if late %}class="row-late"{% endif %}>
+        <td><a href="{{ url_for('incident_detail', iid=i.id) }}">{{ i.id }}</a></td>
+        <td>{{ i.order_date|dt }}</td>
+        <td><span class="pill" style="--c: {{ PLATFORMS[i.platform].color }}">{{ PLATFORMS[i.platform].name }}</span></td>
+        <td><a href="{{ url_for('incident_detail', iid=i.id) }}">{{ i.order_ref }}</a></td>
+        {% if is_admin() %}<td>{{ i.restaurant_name }}</td>{% endif %}
+        <td>{{ INCIDENT_TYPES.get(i.incident_type, i.incident_type) }}</td>
+        <td><span class="prio prio-{{ i.priority }}">{{ PRIORITIES.get(i.priority, i.priority) }}</span></td>
+        <td class="num">{{ i.claimed_amount|money }}</td>
+        <td class="num">{{ i.recovered_amount|money }}</td>
+        <td>
+          <span class="status status-{{ i.status }}">{{ STATUSES[i.status] }}</span>
+          {% if late %}<span class="late-flag" title="Pendiente desde hace {{ days_since(i.order_date) }} días">⚠ {{ days_since(i.order_date) }} d</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if pages > 1 %}
+<nav class="pagination" aria-label="Paginación">
+  {% if page > 1 %}<a class="btn btn-ghost" href="{{ page_url(page - 1) }}">← Anterior</a>{% endif %}
+  <span>Página {{ page }} de {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="{{ page_url(page + 1) }}">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="card empty">
+  <p>No hay incidencias con estos filtros.</p>
+  <a class="btn btn-primary" href="{{ url_for('incident_new') }}">Registrar una incidencia</a>
+</div>
+{% endif %}
+{% endblock %}

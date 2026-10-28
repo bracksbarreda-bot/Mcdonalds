@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Panel{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Panel de incidencias</h1>
+  <form method="get" class="inline-form">
+    <label for="dias">Periodo</label>
+    <select id="dias" name="dias" onchange="this.form.submit()">
+      {% for d in (7, 30, 90) %}
+      <option value="{{ d }}" {% if d == days %}selected{% endif %}>Últimos {{ d }} días</option>
+      {% endfor %}
+    </select>
+    <noscript><button type="submit" class="btn">Aplicar</button></noscript>
+  </form>
+</div>
+
+<section class="kpis" aria-label="Indicadores principales">
+  <div class="kpi">
+    <span class="kpi-label">Incidencias</span>
+    <span class="kpi-value">{{ totals.total }}</span>
+  </div>
+  <a class="kpi kpi-warn" href="{{ url_for('incidents', status='pendientes') }}">
+    <span class="kpi-label">Pendientes</span>
+    <span class="kpi-value">{{ totals.pending }}</span>
+    <span class="kpi-sub">{{ totals.pending_amount|money }} en juego</span>
+  </a>
+  <div class="kpi">
+    <span class="kpi-label">Importe reclamado</span>
+    <span class="kpi-value">{{ totals.claimed|money }}</span>
+  </div>
+  <div class="kpi kpi-ok">
+    <span class="kpi-label">Importe recuperado</span>
+    <span class="kpi-value">{{ totals.recovered|money }}</span>
+  </div>
+  <div class="kpi">
+    <span class="kpi-label">Tasa de recuperación</span>
+    <span class="kpi-value">{{ rate }} %</span>
+    <span class="kpi-sub">sobre incidencias cerradas</span>
+  </div>
+</section>
+
+<section class="grid grid-3" aria-label="Resumen por plataforma">
+  {% for p in by_platform %}
+  <article class="card platform-card" style="--c: {{ p.color }}">
+    <h2><span class="dot" aria-hidden="true"></span>{{ p.name }}</h2>
+    <dl class="stats">
+      <div><dt>Incidencias</dt><dd>{{ p.total }}</dd></div>
+      <div><dt>Pendientes</dt><dd>{{ p.pending }}</dd></div>
+      <div><dt>Reclamado</dt><dd>{{ p.claimed|money }}</dd></div>
+      <div><dt>Recuperado</dt><dd>{{ p.recovered|money }}</dd></div>
+    </dl>
+    <a href="{{ url_for('incidents', platform=p.key) }}">Ver incidencias de {{ p.name }} →</a>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="grid grid-2">
+  <article class="card">
+    <h2>Por tipo de incidencia</h2>
+    {% if by_type %}
+    <ul class="bars">
+      {% for t in by_type %}
+      <li>
+        <a class="bar-label" href="{{ url_for('incidents', type=t.incident_type) }}">{{ INCIDENT_TYPES.get(t.incident_type, t.incident_type) }}</a>
+        <span class="bar-track" aria-hidden="true"><span class="bar-fill" style="width: {{ (t.n / max_type * 100)|round(1) }}%"></span></span>
+        <span class="bar-value">{{ t.n }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Sin incidencias en el periodo.</p>
+    {% endif %}
+  </article>
+
+  <article class="card">
+    <h2>Incidencias por día <small class="muted">(últimos {{ daily|length }} días)</small></h2>
+    <div class="chart" role="img" aria-label="Gráfico de barras con las incidencias diarias">
+      {% for d in daily %}
+      <div class="chart-col" title="{{ d.label }}: {{ d.n }} incidencias">
+        <span class="chart-fill" style="height: {{ (d.n / max_daily * 100)|round(1) }}%"></span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="chart-axis"><span>{{ daily[0].label }}</span><span>Máx. {{ max_daily }}/día</span><span>{{ daily[-1].label }}</span></div>
+  </article>
+</section>
+
+<section class="grid {{ 'grid-2' if by_restaurant else '' }}">
+  <article class="card">
+    <h2>Requieren atención <small class="muted">pendientes desde hace más de {{ ALERT_DAYS }} días</small></h2>
+    {% if alerts %}
+    <table class="table compact">
+      <thead><tr><th scope="col">Pedido</th><th scope="col">Plataforma</th>{% if is_admin() %}<th scope="col">Local</th>{% endif %}<th scope="col">Estado</th><th scope="col">Días</th></tr></thead>
+      <tbody>
+        {% for i in alerts %}
+        <tr>
+          <td><a href="{{ url_for('incident_detail', iid=i.id) }}">{{ i.order_ref }}</a></td>
+          <td><span class="pill" style="--c: {{ PLATFORMS[i.platform].color }}">{{ PLATFORMS[i.platform].name }}</span></td>
+          {% if is_admin() %}<td>{{ i.restaurant_name }}</td>{% endif %}
+          <td><span class="status status-{{ i.status }}">{{ STATUSES[i.status] }}</span></td>
+          <td><strong>{{ days_since(i.order_date) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Todo al día. No hay incidencias pendientes antiguas.</p>
+    {% endif %}
+  </article>
+
+  {% if by_restaurant %}
+  <article class="card">
+    <h2>Por restaurante</h2>
+    <table class="table compact">
+      <thead><tr><th scope="col">Local</th><th scope="col" class="num">Incidencias</th><th scope="col" class="num">Reclamado</th><th scope="col" class="num">Recuperado</th></tr></thead>
+      <tbody>
+        {% for r in by_restaurant %}
+        <tr>
+          <td><a href="{{ url_for('incidents', restaurant=r.id) }}">{{ r.name }}</a></td>
+          <td class="num">{{ r.total }}</td>
+          <td class="num">{{ r.claimed|money }}</td>
+          <td class="num">{{ r.recovered|money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+  {% endif %}
+</section>
+{% endblock %}

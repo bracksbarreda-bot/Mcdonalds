@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar incidencia #' ~ inc.id if editing else 'Nueva incidencia' }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'Editar incidencia #' ~ inc.id if editing else 'Nueva incidencia' }}</h1>
+  <a class="btn btn-ghost" href="{{ url_for('incident_detail', iid=inc.id) if editing else url_for('incidents') }}">Cancelar</a>
+</div>
+
+<form method="post" class="card form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <fieldset>
+    <legend>Plataforma</legend>
+    <div class="platform-picker">
+      {% for k, p in PLATFORMS.items() %}
+      <label class="platform-option" style="--c: {{ p.color }}">
+        <input type="radio" name="platform" value="{{ k }}" required {% if form.get('platform') == k %}checked{% endif %}>
+        <span>{{ p.name }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="form-grid">
+    {% if is_admin() %}
+    <div class="field">
+      <label for="restaurant_id">Restaurante *</label>
+      <select id="restaurant_id" name="restaurant_id" required>
+        <option value="">Selecciona…</option>
+        {% for r in restaurants %}
+        <option value="{{ r.id }}" {% if form.get('restaurant_id')|string == r.id|string %}selected{% endif %}>{{ r.name }} ({{ r.code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="order_ref">Nº de pedido *</label>
+      <input id="order_ref" name="order_ref" maxlength="64" required value="{{ form.get('order_ref', '') }}" placeholder="Ej. GLV-12345678">
+    </div>
+    <div class="field">
+      <label for="order_date">Fecha y hora del pedido *</label>
+      <input id="order_date" name="order_date" type="datetime-local" required value="{{ form.get('order_date', '') }}">
+    </div>
+    <div class="field">
+      <label for="incident_type">Tipo de incidencia *</label>
+      <select id="incident_type" name="incident_type" required>
+        <option value="">Selecciona…</option>
+        {% for k, v in INCIDENT_TYPES.items() %}
+        <option value="{{ k }}" {% if form.get('incident_type') == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="priority">Prioridad</label>
+      <select id="priority" name="priority">
+        {% for k, v in PRIORITIES.items() %}
+        <option value="{{ k }}" {% if form.get('priority') == k %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="order_amount">Importe del pedido (€)</label>
+      <input id="order_amount" name="order_amount" inputmode="decimal" value="{{ form.get('order_amount', '') }}" placeholder="0,00">
+    </div>
+    <div class="field">
+      <label for="claimed_amount">Importe a reclamar (€)</label>
+      <input id="claimed_amount" name="claimed_amount" inputmode="decimal" value="{{ form.get('claimed_amount', '') }}" placeholder="0,00" aria-describedby="claimed_help">
+      <small id="claimed_help" class="muted">Lo que la plataforma descontó o debería abonar.</small>
+    </div>
+    <div class="field">
+      <label for="platform_claim_ref">Ticket de reclamación en la plataforma</label>
+      <input id="platform_claim_ref" name="platform_claim_ref" maxlength="64" value="{{ form.get('platform_claim_ref', '') or '' }}" placeholder="Opcional">
+    </div>
+    <div class="field span-2">
+      <label for="items_affected">Productos afectados</label>
+      <input id="items_affected" name="items_affected" maxlength="500" value="{{ form.get('items_affected', '') or '' }}" placeholder="Ej. Big Mac, Patatas medianas">
+    </div>
+    <div class="field span-2">
+      <label for="description">Descripción</label>
+      <textarea id="description" name="description" rows="4" maxlength="2000" placeholder="Qué pasó, qué dice el cliente, qué dice el rider…">{{ form.get('description', '') or '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{ 'Guardar cambios' if editing else 'Registrar incidencia' }}</button>
+  </div>
+</form>
+{% endblock %}

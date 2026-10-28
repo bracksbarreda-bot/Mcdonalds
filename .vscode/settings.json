@@ -1,0 +1,8 @@
+{
+  // Las plantillas de templates/ son Jinja: el validador de CSS de VS Code no entiende
+  // style="width: {{ valor }}%" y marca errores falsos. El HTML final que recibe el navegador es correcto.
+  "html.validate.styles": false,
+  "files.associations": {
+    "**/templates/*.html": "jinja-html"
+  }
+}

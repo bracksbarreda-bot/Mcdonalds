@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delivery Hub · Incidencias de delivery</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#view">Saltar al contenido</a>
+  <header class="topbar" id="topbar" hidden>
+    <a class="brand" href="#/"><span class="logo" aria-hidden="true">M</span><span>Delivery Hub</span></a>
+    <nav aria-label="Principal" class="nav">
+      <a href="#/" data-nav="dashboard">Panel</a>
+      <a href="#/incidencias" data-nav="incidencias">Incidencias</a>
+      <a href="#/importar" data-nav="importar">Importar Excel</a>
+      <a href="#/correo" data-nav="correo">Correo</a>
+      <a href="#/incidencias/nueva" class="btn btn-primary">+ Nueva incidencia</a>
+    </nav>
+    <div class="user">
+      <span id="user-label"></span>
+      <button type="button" class="btn btn-ghost" id="logout">Salir</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="toasts" class="flashes" aria-live="polite"></div>
+    <div id="view" tabindex="-1"></div>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

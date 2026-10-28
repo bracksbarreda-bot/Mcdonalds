@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Mi cuenta{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <form method="post" class="card login-card" autocomplete="off">
+    <h1>Cambiar contraseña</h1>
+    {% if g.user.must_change_password %}
+    <p class="flash flash-warning">Estás usando la contraseña de fábrica. Cámbiala para poder usar la aplicación.</p>
+    {% endif %}
+    <p class="muted">Mínimo 10 caracteres, con letras y números. Al cambiarla se cierran las sesiones abiertas en otros dispositivos.</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="current_password">Contraseña actual</label>
+    <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+    <label for="new_password">Contraseña nueva</label>
+    <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="confirm_password">Repite la contraseña nueva</label>
+    <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="10" required>
+    <button type="submit" class="btn btn-primary btn-block">Guardar contraseña</button>
+  </form>
+</div>
+{% endblock %}
