@@ -55,6 +55,10 @@ export async function render(el) {
           <p class="muted">Un Excel por plataforma con todos los restaurantes. Los restaurantes nuevos se crean solos.
             Puedes subir el mismo Excel varias veces: los pedidos ya importados no se duplican.</p>
         </article>
+        <article class="card" aria-labelledby="watch-title">
+          <h2 id="watch-title">Carpeta vigilada</h2>
+          <div id="watch" aria-live="polite"><p class="muted">Cargando…</p></div>
+        </article>
         <article class="card"><h2>Últimas importaciones</h2><div id="batches"><p class="muted">Cargando…</p></div></article>
       </div>
     </div>`;
@@ -68,6 +72,7 @@ export async function render(el) {
     li.classList.toggle("done", s < n);
   });
   loadBatches(el.querySelector("#batches"));
+  watchFolder(el);
 
   // ---------- Paso 1: subir ----------
   step1.addEventListener("submit", async (e) => {
@@ -222,6 +227,60 @@ export async function render(el) {
       btn.textContent = "Importar";
     }
   }
+}
+
+// ---------- Carpeta vigilada (watcher.py): se actualiza sola mientras esta pantalla está abierta ----------
+const WATCH_STATUS = {
+  importado: { label: "Importado", cls: "status-resuelta" },
+  sin_novedades: { label: "Sin novedades", cls: "status-rechazada" },
+  duplicado: { label: "Ya procesado", cls: "status-rechazada" },
+  revisar: { label: "Revisar a mano", cls: "status-abierta" },
+};
+
+function watchFolder(el) {
+  const box = el.querySelector("#watch");
+  let lastId = null;
+  let timer = null;
+
+  async function refresh() {
+    if (!box.isConnected) { clearInterval(timer); return; } // se ha cambiado de pantalla
+    let w;
+    try { w = await api("/import/watch"); } catch (ex) { box.innerHTML = `<p class="muted">${esc(ex.message)}</p>`; return; }
+    const newest = w.recent[0]?.id ?? 0;
+    if (lastId !== null && newest !== lastId) loadBatches(el.querySelector("#batches")); // ha entrado algo nuevo
+    lastId = newest;
+    if (!w.enabled) {
+      box.innerHTML = `<p class="muted">Desactivada (variable de entorno WATCH=0).</p>`;
+      clearInterval(timer);
+      return;
+    }
+    box.innerHTML = `
+      <p class="muted">Deja los Excel descargados en esta carpeta y se importan solos en unos segundos.
+        Si algo necesita revisión (filas con error, locales nuevos…) no se importa nada y el archivo pasa a
+        <em>revisar</em>: súbelo a mano arriba.</p>
+      <p><code class="path">${esc(w.folder)}</code></p>
+      ${w.running ? "" : `<p class="flash flash-warning">La vigilancia no está en marcha. Arranca la app con iniciar.bat o servidor.py.</p>`}
+      ${w.last_error ? `<p class="flash flash-error" role="alert">${esc(w.last_error)}</p>` : ""}
+      ${w.waiting.length ? `<p>En espera: ${w.waiting.map((n) => `<strong>${esc(n)}</strong>`).join(", ")}</p>` : ""}
+      <div class="form-actions"><button type="button" class="btn btn-ghost" id="watch-scan">Comprobar ahora</button></div>
+      ${w.recent.length ? `
+        <table class="table compact">
+          <thead><tr><th scope="col">Fecha</th><th scope="col">Archivo</th><th scope="col">Resultado</th></tr></thead>
+          <tbody>${w.recent.map((f) => `<tr>
+            <td class="nowrap">${dt(f.created_at)}</td>
+            <td>${f.batch_id ? `<a href="#/incidencias?batch=${f.batch_id}">${esc(f.filename)}</a>` : esc(f.filename)}</td>
+            <td><span class="status ${WATCH_STATUS[f.status].cls}">${WATCH_STATUS[f.status].label}</span>
+              <br><small class="muted">${esc(f.message || "")}</small></td></tr>`).join("")}</tbody>
+        </table>` : `<p class="muted">Todavía no ha entrado ningún archivo por la carpeta.</p>`}`;
+    box.querySelector("#watch-scan").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      try { await api("/import/watch/scan", { method: "POST" }); setTimeout(refresh, 1500); }
+      catch (ex) { toast(ex.message, "error"); e.target.disabled = false; }
+    });
+  }
+
+  refresh();
+  timer = setInterval(refresh, 15000);
 }
 
 async function loadBatches(box) {

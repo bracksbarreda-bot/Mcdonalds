@@ -429,8 +429,9 @@ def public_preview(ctx, file_id, filename):
     }
 
 
-def run_import(path, filename, ref_date=None):
-    """Analiza de nuevo el archivo y crea locales e incidencias. Lo usan la API y la web clásica."""
+def run_import(path, filename, ref_date=None, delete_after=True):
+    """Analiza de nuevo el archivo y crea locales e incidencias. Lo usan la API, la web clásica y watcher.py
+    (que no borra el archivo: lo mueve a «procesados»)."""
     ctx = analyse_upload(path, filename, ref_date)
     s, platform = ctx["summary"], ctx["platform"]
     conn = db.get_db()
@@ -463,10 +464,11 @@ def run_import(path, filename, ref_date=None):
     conn.execute("UPDATE import_batches SET created_count = ?, duplicate_count = ?, error_count = ? WHERE id = ?",
                  (created, s["duplicates"] + s["repeated"], s["errors"], batch_id))
     conn.commit()
-    try:
-        os.remove(path)
-    except OSError:
-        pass
+    if delete_after:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
     return {"batch_id": batch_id, "created": created, "duplicates": s["duplicates"], "repeated": s["repeated"],
             "errors": s["errors"], "claimed_total": s["claimed_total"], "created_restaurants": created_restaurants}
 
@@ -513,6 +515,24 @@ def import_confirm():
 @admin_required
 def import_batches():
     return jsonify(list_batches())
+
+
+# Carpeta vigilada (ver watcher.py). Import diferido: watcher.py importa este módulo.
+@bp.get("/import/watch")
+@auth_required
+@admin_required
+def import_watch():
+    import watcher
+    return jsonify(watcher.status())
+
+
+@bp.post("/import/watch/scan")
+@auth_required
+@admin_required
+def import_watch_scan():
+    import watcher
+    watcher.scan_now()
+    return jsonify({"ok": True})
 
 
 # --------------------------------------------------------------------------- #
@@ -571,10 +591,42 @@ def claims_preview():
 @auth_required
 @admin_required
 def claims_send():
+    """Pone los correos en la cola de envío gradual (no los manda todos de golpe)."""
     try:
-        return jsonify(claims.send_claims(_ids(body())))
+        return jsonify(claims.enqueue_claims(_ids(body())))
     except claims.MailProblem as exc:
         return error(str(exc), 422)
+
+
+@bp.get("/claims/queue")
+@auth_required
+@admin_required
+def claims_queue():
+    return jsonify(claims.queue_status())
+
+
+@bp.post("/claims/queue/cancel")
+@auth_required
+@admin_required
+def claims_queue_cancel():
+    n = claims.cancel_pending()
+    return jsonify({"cancelled": n, "queue": claims.queue_status()})
+
+
+@bp.post("/claims/queue/clear")
+@auth_required
+@admin_required
+def claims_queue_clear():
+    result = claims.clear_history()
+    return jsonify({**result, "queue": claims.queue_status()})
+
+
+@bp.post("/claims/queue/resume")
+@auth_required
+@admin_required
+def claims_queue_resume():
+    claims.resume()
+    return jsonify(claims.queue_status())
 
 
 @bp.errorhandler(413)

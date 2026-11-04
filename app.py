@@ -7,6 +7,7 @@ Todo sale del mismo servidor (servidor.py, puerto 8080):
 """
 import json
 import os
+import re
 import secrets
 from datetime import date, datetime, timedelta
 from functools import wraps
@@ -211,9 +212,25 @@ def frontend_redirect():
     return redirect("/app/")
 
 
+def _frontend_version():
+    """Cambia cada vez que se modifica cualquier archivo del frontend."""
+    return str(int(max(os.path.getmtime(os.path.join(d, f)) for d, _, fs in os.walk(FRONTEND_DIR) for f in fs)))
+
+
+# Añade ?v=<versión> a los js/css que se cargan entre sí, para que el navegador nunca mezcle
+# archivos viejos de su caché con archivos nuevos (p. ej. tras actualizar la app).
+_ASSET_REF = re.compile(r"""((?:from|import)\s*["']|src=["']|href=["'])((?:\./|\.\./)?[\w./-]+\.(?:js|css))(["'])""")
+
+
+def _versioned(text):
+    v = _frontend_version()
+    return _ASSET_REF.sub(lambda m: f"{m.group(1)}{m.group(2)}?v={v}{m.group(3)}", text)
+
+
 @app.get("/app/")
 def frontend_index():
-    resp = send_from_directory(FRONTEND_DIR, "index.html")
+    with open(os.path.join(FRONTEND_DIR, "index.html"), encoding="utf-8") as fh:
+        resp = Response(_versioned(fh.read()), mimetype="text/html")
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
@@ -222,7 +239,14 @@ def frontend_index():
 def frontend_files(filename):
     if filename.startswith("_"):  # archivos temporales de pruebas
         abort(404)
-    resp = send_from_directory(FRONTEND_DIR, filename)
+    if filename.endswith(".js"):
+        path = os.path.realpath(os.path.join(FRONTEND_DIR, filename))
+        if not path.startswith(os.path.realpath(FRONTEND_DIR) + os.sep) or not os.path.isfile(path):
+            abort(404)
+        with open(path, encoding="utf-8") as fh:
+            resp = Response(_versioned(fh.read()), mimetype="text/javascript")
+    else:
+        resp = send_from_directory(FRONTEND_DIR, filename)
     resp.headers["Cache-Control"] = "no-cache"  # el navegador comprueba siempre si hay una versión nueva
     return resp
 

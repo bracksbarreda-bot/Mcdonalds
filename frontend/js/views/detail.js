@@ -74,7 +74,7 @@ export async function render(el, params) {
           <button type="button" class="btn btn-primary" id="send-mail">Enviar reclamación por correo</button>
           <a class="btn btn-ghost" href="#/correo">Configurar</a>
           ${claim_emails.length ? `<ul class="mail-history">${claim_emails.map((c) => `
-            <li><span class="status ${c.status === "enviado" ? "status-resuelta" : "status-abierta"}">${c.status === "enviado" ? "Enviado" : "Error"}</span>
+            <li><span class="status ${{ enviado: "status-resuelta", pendiente: "status-reclamada", cancelado: "status-rechazada" }[c.status] || "status-abierta"}">${{ enviado: "Enviado", pendiente: "En cola", cancelado: "Cancelado" }[c.status] || "Error"}</span>
               ${c.mode === "prueba" ? `<span class="tag-generic">PRUEBA</span>` : ""}
               ${dt(c.sent_at)} · ${esc(c.recipient)}${c.error ? `<br><small class="warn-text">${esc(c.error)}</small>` : ""}</li>`).join("")}</ul>`
             : `<p class="muted">Todavía no se ha enviado ningún correo de este pedido.</p>`}

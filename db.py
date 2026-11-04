@@ -92,7 +92,11 @@ CREATE TABLE IF NOT EXISTS restaurant_aliases (
     UNIQUE (platform, ext_key)
 );
 
--- Correos de reclamación: uno por pedido (mode 'prueba' = enviado a la dirección de prueba)
+"""
+
+# Correos de reclamación: uno por pedido (mode 'prueba' = enviado a la dirección de prueba).
+# Se envían en cola (status 'pendiente'), de uno en uno y espaciados, para no parecer spam.
+CLAIM_EMAILS_TABLE = """
 CREATE TABLE IF NOT EXISTS claim_emails (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     incident_id INTEGER NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -100,12 +104,34 @@ CREATE TABLE IF NOT EXISTS claim_emails (
     recipient TEXT NOT NULL,
     subject TEXT NOT NULL,
     body TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('enviado', 'error')),
+    status TEXT NOT NULL CHECK (status IN ('pendiente', 'enviado', 'error', 'cancelado')),
     error TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
     sent_by INTEGER REFERENCES users(id),
-    sent_at TEXT NOT NULL
+    queued_at TEXT NOT NULL,
+    sent_at TEXT,
+    hidden INTEGER NOT NULL DEFAULT 0  -- 1 = borrado del historial visible (se sigue contando para los límites)
 );
+"""
+CLAIM_EMAILS_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_claim_emails_incident ON claim_emails(incident_id);
+CREATE INDEX IF NOT EXISTS idx_claim_emails_status ON claim_emails(status, sent_at);
+"""
+SCHEMA += CLAIM_EMAILS_TABLE + CLAIM_EMAILS_INDEXES
+
+# Archivos recogidos de la carpeta vigilada (ver watcher.py)
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS watch_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('importado', 'sin_novedades', 'duplicado', 'revisar')),
+    message TEXT,
+    batch_id INTEGER REFERENCES import_batches(id) ON DELETE SET NULL,
+    created_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_watch_files_sha ON watch_files(sha256, status);
 """
 
 
@@ -122,6 +148,18 @@ def _migrate(conn):
     if "profile" not in bcols:
         conn.execute("ALTER TABLE import_batches ADD COLUMN profile TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_incidents_batch ON incidents(import_batch_id)")
+    # claim_emails de la versión anterior (sin cola): se recrea conservando el historial
+    old = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'claim_emails'").fetchone()
+    if old and "pendiente" not in old[0]:
+        conn.executescript(
+            "ALTER TABLE claim_emails RENAME TO claim_emails_old;" + CLAIM_EMAILS_TABLE +
+            """INSERT INTO claim_emails (id, incident_id, mode, recipient, subject, body, status, error, attempts,
+                                         sent_by, queued_at, sent_at)
+               SELECT id, incident_id, mode, recipient, subject, body, status, error, 1, sent_by, sent_at, sent_at
+               FROM claim_emails_old;
+               DROP TABLE claim_emails_old;""" + CLAIM_EMAILS_INDEXES)
+    if "hidden" not in {r[1] for r in conn.execute("PRAGMA table_info(claim_emails)")}:
+        conn.execute("ALTER TABLE claim_emails ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
     ucols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
     if "must_change_password" not in ucols:
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
